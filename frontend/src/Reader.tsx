@@ -71,15 +71,22 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
   }, [paperId]);
 
   function collapseActive() {
-    setActive((current) => {
-      if (current) setCollapsed((c) => [...c, { ...current, status: "done" }]);
-      return null;
-    });
+    // Read `active` from the closure rather than setActive's functional
+    // updater — calling setCollapsed as a side effect inside that updater
+    // meant the tint only appeared on the *next* unrelated state change
+    // (e.g. the following selection), not immediately on collapse.
+    if (!active) return;
+    setCollapsed((c) => [...c, { ...active, status: "done" }]);
+    setActive(null);
   }
 
   function startExplanation(sel: PendingSelection) {
     collapseActive();
     setPending(null);
+    // Clear the native selection now that it's captured in the card — the
+    // tint (drawn from the stored rects) takes over once this collapses, and
+    // leaving the browser selection live would otherwise sit on top of it.
+    window.getSelection()?.removeAllRanges();
     const card: Card = {
       id: `${Date.now()}`,
       pageNumber: sel.pageNumber,
@@ -112,8 +119,13 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
     if (!flow) return;
     const flowRect = flow.getBoundingClientRect();
     const sel = window.getSelection();
+    // Only treat this as a new selection if the mouseup actually happened
+    // over page text — otherwise a stale (already-consumed) window selection
+    // re-triggers this branch on any later click elsewhere, e.g. the card's
+    // "x" button, producing a duplicate popover for text no longer selected.
+    const inTextLayer = !!(e.target as HTMLElement).closest(".textLayer");
 
-    if (sel && !sel.isCollapsed && sel.toString().trim().length >= MIN_SELECTION_CHARS) {
+    if (inTextLayer && sel && !sel.isCollapsed && sel.toString().trim().length >= MIN_SELECTION_CHARS) {
       const range = sel.getRangeAt(0);
       const pageEl = (range.startContainer.parentElement as HTMLElement | null)?.closest(
         "[data-page]",
@@ -140,10 +152,14 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
     }
 
     // Collapsed click: either dismiss the pending popover, or reopen a tint.
-    setPending(null);
+    // Only act on clicks that actually land on a page — a click on our own
+    // floating chrome (the popover's Simplify button, a card's close button)
+    // isn't a page interaction, and clearing `pending` here would unmount
+    // the popover out from under its own onClick before it can fire.
     const target = e.target as HTMLElement;
     const pageEl = target.closest("[data-page]") as HTMLElement | null;
     if (!pageEl) return;
+    setPending(null);
     const pageNumber = Number(pageEl.dataset.page);
     const pageRect = pageEl.getBoundingClientRect();
     const x = e.clientX - pageRect.left;
@@ -254,9 +270,16 @@ function PageView({
 
       const canvas = canvasRef.current;
       if (canvas) {
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        // Render at device pixel density, not just CSS pixels — otherwise
+        // the canvas backing store is 1:1 with CSS px and looks blurry on
+        // any HiDPI display once the browser upscales it.
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = viewport.width * dpr;
+        canvas.height = viewport.height * dpr;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
         const ctx = canvas.getContext("2d")!;
+        ctx.scale(dpr, dpr);
         renderTask = page.render({ canvasContext: ctx, viewport });
         await renderTask!.promise.catch(() => {});
       }
