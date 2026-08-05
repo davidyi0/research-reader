@@ -8,14 +8,29 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Connection strings (defaults match docker-compose service names).
+    # Connection string (default matches the `postgres` service in compose).
     DATABASE_URL: str = "postgresql+psycopg://studylens:studylens@postgres:5432/studylens"
-    REDIS_URL: str = "redis://redis:6379/0"
-    CHROMA_HOST: str = "chromadb"
-    CHROMA_PORT: int = 8000
 
-    # Only required once ingestion/query land (M3/M4). Optional for M0 boot.
-    OPENAI_API_KEY: str | None = None
+    # --- LLM provider -------------------------------------------------------
+    # Any OpenAI-compatible endpoint: Groq, Cerebras, OpenRouter, Ollama,
+    # Google's compat endpoint, OpenAI. Switching providers is a change to
+    # these three values and nothing else — see app/services/llm/.
+    LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
+    LLM_API_KEY: str = ""
+    LLM_MODEL: str = ""
+    # Budget guard for assembled context. Deliberately approximate — see
+    # `estimate_tokens` in app/services/llm/base.py for why there's no tokenizer.
+    LLM_MAX_CONTEXT_TOKENS: int = 3000
+    LLM_TIMEOUT_SECONDS: float = 60.0
+    # Figure/region explanation needs a vision-capable model; not every free
+    # endpoint has one, so the feature is gated rather than assumed.
+    LLM_SUPPORTS_VISION: bool = False
+
+    # --- Storage ------------------------------------------------------------
+    # Local filesystem for now. Swapping to S3 is a new StorageService subclass,
+    # not a change to any caller. Deliberately outside /app: uvicorn --reload
+    # watches the app bind mount, so PDFs written under it would restart the API.
+    STORAGE_DIR: str = "/data/storage"
 
     # CORS origin for the Vite dev server.
     FRONTEND_ORIGIN: str = "http://localhost:5173"

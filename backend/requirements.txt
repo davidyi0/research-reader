@@ -1,20 +1,23 @@
-# --- Web framework (M0) ---
+# --- Web framework ---
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
+python-multipart==0.0.9
 
-# --- Config (M0) ---
+# --- Config ---
 pydantic==2.9.2
 pydantic-settings==2.5.2
 
-# --- Postgres / ORM (M0 connection check; models land in M1) ---
+# --- Postgres / ORM ---
 sqlalchemy==2.0.35
 psycopg[binary]==3.2.3
 
-# --- Migrations (M1) ---
+# --- Migrations ---
 alembic==1.13.2
 
-# --- Vector DB client (M0 connection check; used for real in M3/M4) ---
-chromadb==0.5.5
+# --- PDF text + region extraction ---
+pymupdf==1.24.10
 
-# --- Redis client (present now, used in Phase 3) ---
-redis==5.0.8
+# --- HTTP: LLM provider calls (SSE streaming) + paper fetching ---
+# Deliberately not the `openai` SDK — the provider layer talks raw
+# OpenAI-compatible HTTP so any endpoint works without a vendor client.
+httpx==0.27.2

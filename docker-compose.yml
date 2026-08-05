@@ -1,4 +1,4 @@
-# local dev stack 
+# local dev stack
 
 services:
   postgres:
@@ -17,23 +17,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  chromadb:
-    image: chromadb/chroma:0.5.5
-    ports:
-      - "8001:8000"          # host 8001 -> container 8000 (avoids clashing with the api port)
-    volumes:
-      - chromadata:/chroma/chroma
+    restart: unless-stopped
 
   api:
     build: ./backend
@@ -41,16 +25,34 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    # host.docker.internal lets LLM_BASE_URL point at a locally-running Ollama.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app        # bind mount -> uvicorn --reload sees code edits live
+      # Storage lives OUTSIDE /app on purpose: uvicorn --reload watches /app, so
+      # writing an ingested PDF under it would restart the API mid-request.
+      - ./storage:/data/storage
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      chromadb:
-        condition: service_started
+    restart: unless-stopped
+
+  # Dev server only. The production static build stays deferred to P7; this
+  # exists so localhost:5173 is always up rather than needing a spare terminal.
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # Shadows the host's Windows-built node_modules, whose native binaries
+      # (esbuild, rollup) can't run in a Linux container.
+      - frontend_node_modules:/app/node_modules
+    restart: unless-stopped
 
 volumes:
   pgdata:
-  chromadata:
+  frontend_node_modules:
