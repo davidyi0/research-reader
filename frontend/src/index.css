@@ -1,1 +1,23 @@
 @import "tailwindcss";
+
+/* pdf.js text layer: invisible text positioned exactly over the canvas glyphs
+   so native browser selection works. Minimal version of pdf.js's own
+   web/text_layer_builder.css, since we're not pulling in the full viewer. */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  opacity: 1;
+}
+.textLayer span,
+.textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.textLayer ::selection {
+  background: rgba(37, 99, 235, 0.35);
+}
