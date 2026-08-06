@@ -126,11 +126,16 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
     if (!flow) return;
     const flowRect = flow.getBoundingClientRect();
     const sel = window.getSelection();
+    const target = e.target as HTMLElement;
+    // Clicks on our own floating chrome (the lens picker, the card itself —
+    // its close button, its text, a scrollbar drag) are handled by their own
+    // handlers; don't let the outside-click-closes logic below race them.
+    if (target.closest("[data-ui-chrome]")) return;
     // Only treat this as a new selection if the mouseup actually happened
     // over page text — otherwise a stale (already-consumed) window selection
     // re-triggers this branch on any later click elsewhere, e.g. the card's
     // "x" button, producing a duplicate popover for text no longer selected.
-    const inTextLayer = !!(e.target as HTMLElement).closest(".textLayer");
+    const inTextLayer = !!target.closest(".textLayer");
 
     if (inTextLayer && sel && !sel.isCollapsed && sel.toString().trim().length >= MIN_SELECTION_CHARS) {
       const range = sel.getRangeAt(0);
@@ -158,34 +163,41 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
       return;
     }
 
-    // Collapsed click: either dismiss the pending popover, or reopen a tint.
-    // Only act on clicks that actually land on a page — a click on our own
-    // floating chrome (the popover's Simplify button, a card's close button)
-    // isn't a page interaction, and clearing `pending` here would unmount
-    // the popover out from under its own onClick before it can fire.
-    const target = e.target as HTMLElement;
-    const pageEl = target.closest("[data-page]") as HTMLElement | null;
-    if (!pageEl) return;
+    // Not a new selection and not on our own chrome: dismiss the pending
+    // popover, and either reopen a tint under the click or, failing that,
+    // treat it as an outside click that closes whatever's currently open.
     setPending(null);
-    const pageNumber = Number(pageEl.dataset.page);
-    const pageRect = pageEl.getBoundingClientRect();
-    const x = e.clientX - pageRect.left;
-    const y = e.clientY - pageRect.top;
-    const hit = collapsed.find(
-      (c) =>
-        c.pageNumber === pageNumber &&
-        c.rects.some((r) => x >= r.left && x <= r.left + r.width && y >= r.top && y <= r.top + r.height),
-    );
-    if (hit) reopenCard(hit.id);
+    const pageEl = target.closest("[data-page]") as HTMLElement | null;
+    if (pageEl) {
+      const pageNumber = Number(pageEl.dataset.page);
+      const pageRect = pageEl.getBoundingClientRect();
+      const x = e.clientX - pageRect.left;
+      const y = e.clientY - pageRect.top;
+      const hit = collapsed.find(
+        (c) =>
+          c.pageNumber === pageNumber &&
+          c.rects.some((r) => x >= r.left && x <= r.left + r.width && y >= r.top && y <= r.top + r.height),
+      );
+      if (hit) {
+        reopenCard(hit.id);
+        return;
+      }
+    }
+    collapseActive();
   }
 
-  const collapsedByPage = useMemo(() => {
+  // The active card's passage stays tinted too, same as collapsed ones —
+  // otherwise the highlight vanishes the instant a lens is picked (the
+  // native selection is cleared right away) and doesn't return until the
+  // card collapses.
+  const tintsByPage = useMemo(() => {
     const map = new Map<number, Card[]>();
-    for (const c of collapsed) {
+    const all = active ? [...collapsed, active] : collapsed;
+    for (const c of all) {
       map.set(c.pageNumber, [...(map.get(c.pageNumber) ?? []), c]);
     }
     return map;
-  }, [collapsed]);
+  }, [collapsed, active]);
 
   return (
     <div className="flex h-screen flex-col">
@@ -214,7 +226,7 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
                 pdfDoc={pdfDocRef.current}
                 pageNumber={n}
                 scale={scale}
-                tints={collapsedByPage.get(n) ?? []}
+                tints={tintsByPage.get(n) ?? []}
               />
             ))}
         </div>
@@ -231,6 +243,7 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
 
         {pending && lenses.length > 0 && (
           <div
+            data-ui-chrome
             className="absolute z-10 flex flex-col gap-0.5 rounded-md bg-slate-800 p-1 shadow-lg"
             style={{ top: pending.docTop, left: pending.docLeft }}
           >
@@ -359,7 +372,7 @@ function ExplanationCard({
   style: React.CSSProperties;
 }) {
   return (
-    <div style={style} className="rounded-md border border-slate-200 bg-white p-4 shadow-md">
+    <div data-ui-chrome style={style} className="rounded-md border border-slate-200 bg-white p-4 shadow-md">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
