@@ -1,5 +1,7 @@
 """Paper ingest, listing, file serving, and the explanation stream."""
 import json
+import logging
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -17,6 +19,7 @@ from app.services.llm import LLMError, get_provider
 from app.services.storage import storage
 
 router = APIRouter(prefix="/papers", tags=["papers"])
+logger = logging.getLogger(__name__)
 
 DEV_EMAIL = "dev@localhost"
 
@@ -212,8 +215,13 @@ def explain(
     async def event_stream():
         provider = get_provider()
         parts: list[str] = []
+        t0 = time.perf_counter()
+        first_delta = True
         try:
             async for delta in provider.stream(system=SIMPLIFY_SYSTEM, user=user_message):
+                if first_delta:
+                    logger.info("explain TTFT=%.3fs paper=%s page=%s", time.perf_counter() - t0, paper_id_, page_number)
+                    first_delta = False
                 parts.append(delta)
                 yield f"data: {json.dumps({'delta': delta})}\n\n"
         except LLMError as exc:

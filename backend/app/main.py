@@ -3,6 +3,7 @@
 Exposes `/health`, which verifies the API can actually reach Postgres, not just
 that the process is alive, plus the P1 papers router (ingest, library, explain).
 """
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,6 +14,8 @@ from app.api.papers import router as papers_router
 from app.core.config import settings
 from app.core.database import engine
 from app.services.llm import close_provider
+
+logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
