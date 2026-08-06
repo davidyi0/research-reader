@@ -15,6 +15,7 @@ from app.core.database import SessionLocal, get_db
 from app.models import Explanation, Page, Paper, User
 from app.services import context, fetch
 from app.services.extract import extract
+from app.services.lenses import LENSES
 from app.services.llm import LLMError, get_provider
 from app.services.storage import storage
 
@@ -22,21 +23,6 @@ router = APIRouter(prefix="/papers", tags=["papers"])
 logger = logging.getLogger(__name__)
 
 DEV_EMAIL = "dev@localhost"
-
-# The response cap is a layout constraint, not a style preference: the card
-# lives in a ~480px gutter on a ~725px viewport, and anything past roughly 150
-# words needs its own scrollbar. Short answers also stream faster, which is the
-# metric this product is gated on. The depth dial (P2) is the escape hatch.
-SIMPLIFY_SYSTEM = (
-    "You explain passages from research papers to a reader who is mid-paper and "
-    "wants to keep reading. Restate the selected passage in plain language.\n\n"
-    "Rules:\n"
-    "- Under 150 words. No preamble, no restating the question, no sign-off.\n"
-    "- Lead with the point. Do not open with 'This passage describes...'.\n"
-    "- Define jargon inline, briefly, only where it blocks understanding.\n"
-    "- Use the surrounding text for context, but explain only the selection.\n"
-    "- Plain prose. No headings. Markdown only for emphasis or a short list."
-)
 
 
 def current_user(db: Session = Depends(get_db)) -> User:
@@ -67,6 +53,17 @@ class ExplainIn(BaseModel):
     # the selected string are enough to locate the passage server-side.
     page_number: int
     selected_text: str
+    lens: str = "simplify"
+
+
+class LensOut(BaseModel):
+    key: str
+    label: str
+
+
+@router.get("/lenses")
+def list_lenses() -> list[LensOut]:
+    return [LensOut(key=lens.key, label=lens.label) for lens in LENSES.values()]
 
 
 def _ingest(paper_id: uuid.UUID, pdf_bytes: bytes) -> None:
@@ -196,6 +193,10 @@ def explain(
     generator below holds no session; and the row is written afterwards from a
     fresh short-lived one.
     """
+    lens = LENSES.get(body.lens)
+    if lens is None:
+        raise HTTPException(422, f"Unknown lens: {body.lens!r}")
+
     paper = _get_paper(db, user, paper_id)
     page = (
         db.query(Page)
@@ -218,7 +219,7 @@ def explain(
         t0 = time.perf_counter()
         first_delta = True
         try:
-            async for delta in provider.stream(system=SIMPLIFY_SYSTEM, user=user_message):
+            async for delta in provider.stream(system=lens.system, user=user_message):
                 if first_delta:
                     logger.info("explain TTFT=%.3fs paper=%s page=%s", time.perf_counter() - t0, paper_id_, page_number)
                     first_delta = False
@@ -235,7 +236,7 @@ def explain(
                 write_db.add(
                     Explanation(
                         paper_id=paper_id_,
-                        lens="simplify",
+                        lens=lens.key,
                         selected_text=selected_text,
                         page_number=page_number,
                         response=response,

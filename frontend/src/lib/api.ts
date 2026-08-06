@@ -36,6 +36,14 @@ export function pdfFileUrl(paperId: string): string {
   return `${API_URL}/papers/${paperId}/file`;
 }
 
+export type Lens = { key: string; label: string };
+
+export async function listLenses(): Promise<Lens[]> {
+  const res = await fetch(`${API_URL}/papers/lenses`);
+  if (!res.ok) throw new Error(`Failed to list lenses: ${res.status}`);
+  return res.json();
+}
+
 export type ExplainHandlers = {
   onDelta: (delta: string) => void;
   onDone: () => void;
@@ -48,6 +56,7 @@ export async function streamExplain(
   paperId: string,
   pageNumber: number,
   selectedText: string,
+  lens: string,
   handlers: ExplainHandlers,
 ): Promise<void> {
   let res: Response;
@@ -55,7 +64,7 @@ export async function streamExplain(
     res = await fetch(`${API_URL}/papers/${paperId}/explain`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ page_number: pageNumber, selected_text: selectedText }),
+      body: JSON.stringify({ page_number: pageNumber, selected_text: selectedText, lens }),
     });
   } catch (e) {
     handlers.onError(String(e));

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 // Vite-friendly worker URL. Matches the installed pdfjs-dist version.
 import PdfWorker from "pdfjs-dist/build/pdf.worker.min.js?url";
-import { pdfFileUrl, streamExplain } from "./lib/api";
+import { type Lens, listLenses, pdfFileUrl, streamExplain } from "./lib/api";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = PdfWorker;
 
@@ -28,6 +28,7 @@ type Card = {
   selectedText: string;
   rects: Rect[]; // page-local, for the tint
   docTop: number; // flow-relative, for the gutter card
+  lensLabel: string;
   text: string;
   status: "streaming" | "done" | "error";
   error?: string;
@@ -42,8 +43,13 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const [active, setActive] = useState<Card | null>(null);
   const [collapsed, setCollapsed] = useState<Card[]>([]);
+  const [lenses, setLenses] = useState<Lens[]>([]);
 
   const flowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    listLenses().then(setLenses).catch(() => setLenses([]));
+  }, []);
 
   useEffect(() => {
     // Keep the loading task itself (not just a `cancelled` flag) so cleanup
@@ -80,7 +86,7 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
     setActive(null);
   }
 
-  function startExplanation(sel: PendingSelection) {
+  function startExplanation(sel: PendingSelection, lens: Lens) {
     collapseActive();
     setPending(null);
     // Clear the native selection now that it's captured in the card — the
@@ -93,11 +99,12 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
       selectedText: sel.selectedText,
       rects: sel.rects,
       docTop: sel.docTop,
+      lensLabel: lens.label,
       text: "",
       status: "streaming",
     };
     setActive(card);
-    streamExplain(paperId, sel.pageNumber, sel.selectedText, {
+    streamExplain(paperId, sel.pageNumber, sel.selectedText, lens.key, {
       onDelta: (delta) =>
         setActive((c) => (c && c.id === card.id ? { ...c, text: c.text + delta } : c)),
       onDone: () => setActive((c) => (c && c.id === card.id ? { ...c, status: "done" } : c)),
@@ -222,16 +229,21 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
           )}
         </div>
 
-        {pending && (
-          <button
-            onClick={() =>
-              startExplanation(pending)
-            }
-            className="absolute z-10 rounded-md bg-slate-800 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-slate-700"
+        {pending && lenses.length > 0 && (
+          <div
+            className="absolute z-10 flex flex-col gap-0.5 rounded-md bg-slate-800 p-1 shadow-lg"
             style={{ top: pending.docTop, left: pending.docLeft }}
           >
-            Simplify
-          </button>
+            {lenses.map((lens) => (
+              <button
+                key={lens.key}
+                onClick={() => startExplanation(pending, lens)}
+                className="whitespace-nowrap rounded px-3 py-1 text-left text-xs font-medium text-white hover:bg-slate-700"
+              >
+                {lens.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -349,7 +361,12 @@ function ExplanationCard({
   return (
     <div style={style} className="rounded-md border border-slate-200 bg-white p-4 shadow-md">
       <div className="flex items-start justify-between gap-2">
-        <p className="line-clamp-2 text-xs italic text-slate-400">"{card.selectedText}"</p>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {card.lensLabel}
+          </p>
+          <p className="line-clamp-2 text-xs italic text-slate-400">"{card.selectedText}"</p>
+        </div>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
           ×
         </button>
