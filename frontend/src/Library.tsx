@@ -1,7 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Paper, createPaper, listPapers } from "./lib/api";
 
-export default function Library({ onOpen }: { onOpen: (paperId: string) => void }) {
+export default function Library({
+  onOpen,
+  onSignOut,
+}: {
+  onOpen: (paperId: string) => void;
+  onSignOut: () => void;
+}) {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [source, setSource] = useState("");
   const [adding, setAdding] = useState(false);
@@ -41,7 +47,12 @@ export default function Library({ onOpen }: { onOpen: (paperId: string) => void 
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-2xl font-bold text-slate-800">Library</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-800">Library</h1>
+        <button onClick={onSignOut} className="text-sm text-slate-500 hover:text-slate-800">
+          Sign out
+        </button>
+      </div>
 
       <form onSubmit={handleAdd} className="mt-6 flex gap-2">
         <input

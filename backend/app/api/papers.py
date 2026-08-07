@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.deps import current_user
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.models import Explanation, Page, Paper, User
@@ -21,16 +22,6 @@ from app.services.storage import storage
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 logger = logging.getLogger(__name__)
-
-DEV_EMAIL = "dev@localhost"
-
-
-def current_user(db: Session = Depends(get_db)) -> User:
-    """The seeded dev user. Swapped for real auth at P7 — no schema change."""
-    user = db.query(User).filter_by(email=DEV_EMAIL).first()
-    if user is None:
-        raise HTTPException(500, "Dev user missing — run `python -m scripts.seed`.")
-    return user
 
 
 class PaperOut(BaseModel):

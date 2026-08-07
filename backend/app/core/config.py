@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     # CORS origin for the Vite dev server.
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 
+    # --- Auth -----------------------------------------------------------
+    # Google Sign-In verifies the ID token's audience against this.
+    GOOGLE_CLIENT_ID: str = ""
+    # Signs our own session JWT, issued after a Google token verifies.
+    JWT_SECRET: str = ""
+    JWT_EXPIRES_DAYS: int = 30
+    # Comma-separated allowlist gating who can actually get an account, since
+    # anyone with a Google account can otherwise complete the OAuth flow.
+    # Empty means "anyone with a valid Google token" — set this before
+    # sharing the URL outside people you already trust individually.
+    ALLOWED_EMAILS: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

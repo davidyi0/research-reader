@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 // Vite-friendly worker URL. Matches the installed pdfjs-dist version.
 import PdfWorker from "pdfjs-dist/build/pdf.worker.min.js?url";
-import { type Lens, listLenses, pdfFileUrl, streamExplain } from "./lib/api";
+import { getToken, type Lens, listLenses, pdfFileUrl, streamExplain } from "./lib/api";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = PdfWorker;
 
@@ -34,7 +34,15 @@ type Card = {
   error?: string;
 };
 
-export default function Reader({ paperId, onBack }: { paperId: string; onBack: () => void }) {
+export default function Reader({
+  paperId,
+  onBack,
+  onSignOut,
+}: {
+  paperId: string;
+  onBack: () => void;
+  onSignOut: () => void;
+}) {
   const [numPages, setNumPages] = useState(0);
   const [scale, setScale] = useState(1);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -56,7 +64,11 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
     // can call `.destroy()` — React 18 StrictMode double-invokes this effect
     // in dev, and a bare flag leaves the first task's worker half-initialized
     // instead of properly torn down, which was hanging the second attempt.
-    const loadingTask = pdfjsLib.getDocument(pdfFileUrl(paperId));
+    const token = getToken();
+    const loadingTask = pdfjsLib.getDocument({
+      url: pdfFileUrl(paperId),
+      httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     let cancelled = false;
     loadingTask.promise
       .then(async (doc: any) => {
@@ -201,9 +213,12 @@ export default function Reader({ paperId, onBack }: { paperId: string; onBack: (
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-4 border-b border-slate-200 px-4 py-2">
+      <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-2">
         <button onClick={onBack} className="text-sm text-slate-500 hover:text-slate-800">
           ← Library
+        </button>
+        <button onClick={onSignOut} className="text-sm text-slate-500 hover:text-slate-800">
+          Sign out
         </button>
       </header>
 

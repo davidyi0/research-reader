@@ -36,8 +36,9 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    # Placeholder until the deploy phase wires up real bcrypt hashing.
-    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # From the Google ID token at first sign-in. Auth is Google-only — no
+    # password to store.
+    name: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     papers: Mapped[list["Paper"]] = relationship(

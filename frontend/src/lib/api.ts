@@ -2,6 +2,40 @@
 // the app is two views and a handful of endpoints, React state is enough.
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+const TOKEN_KEY = "studylens_token";
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export type Session = { token: string; email: string; name: string | null };
+
+export async function signInWithGoogle(credential: string): Promise<Session> {
+  const res = await fetch(`${API_URL}/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail ?? `Sign-in failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export type Paper = {
   id: string;
   title: string | null;
@@ -16,7 +50,7 @@ export type Paper = {
 };
 
 export async function listPapers(): Promise<Paper[]> {
-  const res = await fetch(`${API_URL}/papers`);
+  const res = await fetch(`${API_URL}/papers`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to list papers: ${res.status}`);
   return res.json();
 }
@@ -24,7 +58,7 @@ export async function listPapers(): Promise<Paper[]> {
 export async function createPaper(source: string): Promise<Paper> {
   const body = new FormData();
   body.set("source", source);
-  const res = await fetch(`${API_URL}/papers`, { method: "POST", body });
+  const res = await fetch(`${API_URL}/papers`, { method: "POST", body, headers: authHeaders() });
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
     throw new Error(detail?.detail ?? `Failed to add paper: ${res.status}`);
@@ -39,7 +73,7 @@ export function pdfFileUrl(paperId: string): string {
 export type Lens = { key: string; label: string };
 
 export async function listLenses(): Promise<Lens[]> {
-  const res = await fetch(`${API_URL}/papers/lenses`);
+  const res = await fetch(`${API_URL}/papers/lenses`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to list lenses: ${res.status}`);
   return res.json();
 }
@@ -63,7 +97,7 @@ export async function streamExplain(
   try {
     res = await fetch(`${API_URL}/papers/${paperId}/explain`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ page_number: pageNumber, selected_text: selectedText, lens }),
     });
   } catch (e) {
