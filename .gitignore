@@ -8,6 +8,7 @@ venv/
 # Env / secrets
 .env
 .env.local
+.env.prod
 
 # Local document storage (Phase 1 LocalStorageService)
 storage/
@@ -24,3 +25,7 @@ chromadata/
 # IDE / OS
 .DS_Store
 .idea/
+
+# Meta/process docs — local working notes, not part of the visible codebase
+CLAUDE.md
+handoff.md

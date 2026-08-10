@@ -1,0 +1,51 @@
+# Production stack for the single-EC2-instance deploy. Self-contained
+# rather than a docker-compose.yml override, since Compose merges list-type
+# keys (ports/volumes/extra_hosts) instead of replacing them — an override
+# file couldn't actually drop the dev bind mounts or the Postgres port
+# publish. Run with:
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-studylens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-studylens}
+      POSTGRES_DB: ${POSTGRES_DB:-studylens}
+    # No port publish — stays reachable only over the internal compose
+    # network, not from the host or the internet.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-studylens}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - .env.prod
+    volumes:
+      - ./storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+        VITE_API_URL: ""
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
