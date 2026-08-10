@@ -41,11 +41,31 @@ services:
       args:
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_API_URL: ""
-    ports:
-      - "80:80"
+    # No port publish — Caddy is the sole public entry point now, reverse
+    # proxying to this container by its compose network hostname.
     depends_on:
       - api
     restart: unless-stopped
 
+  # Terminates HTTPS and reverse-proxies to the frontend (which itself
+  # proxies /health, /auth, /papers on to the api container — see
+  # frontend/nginx.conf). Caddy auto-obtains and renews a free Let's
+  # Encrypt cert for the domain in ./Caddyfile with no extra config, which
+  # is the whole reason it's here instead of nginx+certbot.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
